@@ -22,7 +22,7 @@ APK_RELEASE_UNSIGNED := app/build/outputs/apk/release/app-release-unsigned.apk
 DIST_DEBUG := xingzhu-debug.apk
 DIST_RELEASE := xingzhu-release.apk
 
-.PHONY: help build apk release install clean test deps update-check
+.PHONY: help build apk release install clean test deps update-check web web-test
 
 help:
 	@echo "行箸 · 构建命令："
@@ -34,6 +34,8 @@ help:
 	@echo "  make clean         清理构建产物（含根目录安装包）"
 	@echo "  make deps          刷新依赖缓存并打印依赖树"
 	@echo "  make update-check  检查依赖是否有新版本"
+	@echo "  make web           本地启动 Web 版（http://localhost:8080）"
+	@echo "  make web-test      运行 Web 引擎一致性测试"
 
 build:
 	$(GRADLE) :app:assembleDebug :app:assembleRelease
@@ -60,3 +62,10 @@ deps:
 
 update-check:
 	$(GRADLE) dependencyUpdates -Drevision=release
+
+# Web 版（纯静态，零构建）
+web:
+	cd web && python3 -m http.server 8080
+
+web-test:
+	cd web && node tools/engine-test.mjs

@@ -1,0 +1,7 @@
+# Cloudflare Pages 响应头（构建输出目录为 web/ 时自动生效）
+
+/sw.js
+  Cache-Control: no-cache
+
+/manifest.webmanifest
+  Cache-Control: no-cache

@@ -25,6 +25,22 @@
 
 - 前往 [GitHub Releases](https://github.com/ZhangYet/xingzhu/releases) 下载最新 APK（`xingzhu-release.apk`）
 
+## Web 版
+
+同一套标注引擎与语料的**浏览器版本**（零构建，纯静态 HTML/CSS/JS），界面按桌面 / 网页设备重新布局：
+
+```bash
+cd web && python3 -m http.server 8080   # 或仓库根目录 make web
+# 打开 http://localhost:8080/
+```
+
+- 功能对齐 Android：书架（6 种排序 + 作者分组）、7.6 万首语料全文搜索（命中高亮 / 展开全诗）、逐字平仄与韵脚阅读、习作格律检测
+- **PWA**：首次访问缓存全部语料，可离线使用 / 安装到桌面
+- 书架用 IndexedDB 持久化；语料 / 字典直接引用 `app` 与 `engine` 下的数据
+- 引擎一致性测试：`make web-test`（移植 Kotlin 单测，逐条断言）
+- 部署 Cloudflare Pages：构建命令 `bash web/tools/prepare-data.sh`、输出目录 `web`（详见 [web/README.md](web/README.md)）
+- 详见 [web/README.md](web/README.md)
+
 ## 构建
 
 环境：JDK 17 + Android SDK（minSdk 26 / targetSdk 35）
@@ -42,6 +58,7 @@ make release      # 仅构建已签名 release 包
 
 - `:app` — Android 应用（Compose、Room、Hilt）
 - `:engine` — 纯 Kotlin 标注引擎（诗韵新编平仄 / 韵脚判定，可单测）
+- `web/` — Web 版（原生 ES Modules + IndexedDB，复用同一套语料与引擎逻辑）
 - `tools/build_corpus.py` — 语料构建脚本（chinese-poetry → assets）
 
 ## 版本
