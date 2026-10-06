@@ -1,7 +1,7 @@
 // 行箸 Web · Service Worker
 // 首次访问即把「应用外壳 + 字典 + 全部语料」缓存到本地，之后可离线使用。
 
-const VERSION = 'xingzhu-v2';
+const VERSION = 'xingzhu-v3';
 const STATIC_CACHE = `${VERSION}-static`;
 const DATA_CACHE = `${VERSION}-data`;
 

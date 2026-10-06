@@ -54,6 +54,35 @@ def paras_to_content(paras) -> str:
     return clean_editorial(clean(simp("".join(p for p in paras))))
 
 
+def nalan_content(paras) -> str:
+    """纳兰性德诗集：`para` 是逐行的诗句，行尾普遍没有标点。
+    若直接拼接，行与行之间就会粘成一个"句"（影响平仄/韵脚切分）。
+    这里按行补齐标点：行内有标点的整行以「。」收尾；整行无标点的
+    单句则按对句关系交替补「，/。」，保证每个句读边界完整。
+    """
+    punct = "，。！？；：、"
+    lines = [clean_editorial(clean(simp(p))) for p in paras]
+    lines = [line for line in lines if line]
+    out = []
+    toggle = 0
+    for i, line in enumerate(lines):
+        last = i == len(lines) - 1
+        if line[-1] in punct:
+            out.append(line)
+        elif any(ch in punct for ch in line):
+            out.append(line + "。")
+            toggle = 0
+        elif last:
+            out.append(line + "。")
+        else:
+            out.append(line + ("，" if toggle == 0 else "。"))
+            toggle ^= 1
+    text = "".join(out)
+    if text and text[-1] in "，、":
+        text = text[:-1] + "。"
+    return text
+
+
 def infer_tang_form(content: str) -> str:
     """粗判近体诗体裁：按句数与每句字数。"""
     sents = [s for s in re.split(r"[。！？，；]", content) if s]
@@ -201,14 +230,14 @@ def main():
     )
     emit("yuanqu", poems)
 
-    # 清（纳兰性德）
+    # 清（纳兰性德）—— para 行尾缺标点，用 nalan_content 补齐
     with open(os.path.join(src, "纳兰性德/纳兰性德诗集.json"), encoding="utf-8") as f:
         data = json.load(f)
     poems = []
     extract(
         data,
         lambda e: (e.get("title", ""), "纳兰性德", "清", "词",
-                   paras_to_content(e.get("para", []))),
+                   nalan_content(e.get("para", []))),
         seen, poems,
     )
     emit("qing", poems)
