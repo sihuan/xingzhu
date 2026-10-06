@@ -1,7 +1,10 @@
-// 添加诗词页（与 Kotlin AddScreen.kt / AddViewModel.kt 对应）
+// 添加诗词页（对应 Kotlin AddScreen.kt / AddViewModel.kt）
 // 语料全文搜索 + 命中片段高亮 + 展开全诗 + 加入书架。
+// Web 端展示全部命中并分页加载（滚动到底自动加载 / 「加载更多」按钮）。
 
 import { el, icon, toast } from './dom.js';
+
+const PAGE_SIZE = 50;
 
 // 模块级缓存：语料只加载一次
 let corpus = null;
@@ -64,6 +67,16 @@ function metaText(seed) {
     .filter(Boolean).join(' · ');
 }
 
+function libraryKey(title, author) {
+  return title + '\u0000' + author;
+}
+
+function libraryKeys(poems) {
+  const set = new Set();
+  for (const p of poems) set.add(libraryKey(p.title, p.author));
+  return set;
+}
+
 export function mountAdd(root, app) {
   root.classList.add('view-add');
 
@@ -76,15 +89,26 @@ export function mountAdd(root, app) {
   });
   const searchBox = el('div', { class: 'search-box' }, icon('search', 20), searchInput);
   const statusLine = el('div', { class: 'corpus-status' });
+  const metaLine = el('div', { class: 'results-meta' });
   const resultsEl = el('div', { class: 'search-results' });
+  const sentinel = el('div', { class: 'load-more-sentinel' });
 
-  root.replaceChildren(el('div', { class: 'add-head' }, searchBox, statusLine), resultsEl);
+  root.replaceChildren(el('div', { class: 'add-head' }, searchBox, statusLine, metaLine), resultsEl);
 
-  // 每个结果卡的展开状态
-  let results = [];
+  let results = [];          // 全部命中的 seed（标题/作者优先）
+  let rendered = 0;          // 已渲染条数
   const expanded = new Set();
   let query = '';
   let debounceTimer = null;
+  let libKeys = libraryKeys(app.lib.poems);
+  const cardNodes = new Map();
+
+  // 滚动到底自动加载
+  const observer = ('IntersectionObserver' in window)
+    ? new IntersectionObserver((entries) => {
+      if (entries.some((e) => e.isIntersecting)) loadMore();
+    }, { rootMargin: '600px 0px' })
+    : null;
 
   const updateStatus = () => {
     if (corpusError) {
@@ -99,40 +123,22 @@ export function mountAdd(root, app) {
     }
   };
 
-  const performSearch = () => {
-    query = searchInput.value;
-    if (!corpus) { results = []; renderResults(); return; }
-    const found = app.lib.searchCorpus(query, corpus);
-    results = found.map((seed) => ({ seed, inLibrary: app.lib.isInLibrary(seed) }));
-    renderResults();
-  };
-
-  const onInput = () => {
-    clearTimeout(debounceTimer);
-    debounceTimer = setTimeout(performSearch, 300);
-  };
-  searchInput.addEventListener('input', onInput);
-
-  function renderResults() {
-    if (!corpus && !corpusError) return;
-    if (!query.trim()) {
-      resultsEl.replaceChildren(el('div', { class: 'hint-box' },
-        el('p', { text: '输入题目或作者，从诗经至清诗（7 万余首）中查找' })));
-      return;
-    }
-    if (results.length === 0) {
-      resultsEl.replaceChildren(el('div', { class: 'hint-box' }, el('p', { text: '没有找到相关诗词' })));
-      return;
-    }
-    const list = el('div', { class: 'result-list' });
-    results.forEach((item, index) => {
-      list.append(resultCard(item, index));
-    });
-    resultsEl.replaceChildren(list);
+  function loadMore() {
+    if (rendered >= results.length) return;
+    rendered = Math.min(rendered + PAGE_SIZE, results.length);
+    renderList();
+    updateMeta();
   }
 
-  function resultCard(item, index) {
-    const { seed } = item;
+  function updateMeta() {
+    if (!query.trim() || results.length === 0) { metaLine.replaceChildren(); return; }
+    metaLine.replaceChildren(el('span', {
+      text: `找到 ${results.length.toLocaleString('zh-CN')} 首 · 已显示 ${Math.min(rendered, results.length).toLocaleString('zh-CN')} 首`,
+    }));
+  }
+
+  function resultCard(seed, index) {
+    const inLibrary = libKeys.has(libraryKey(seed.title, seed.author));
     const isExpanded = expanded.has(index);
     const snippet = matchedSnippet(seed.content, query);
     const body = el('p', { class: 'result-content' });
@@ -149,21 +155,25 @@ export function mountAdd(root, app) {
       class: 'btn btn-text',
       onclick: () => {
         if (expanded.has(index)) expanded.delete(index); else expanded.add(index);
-        renderResults();
+        const fresh = resultCard(seed, index);
+        const old = cardNodes.get(index);
+        if (old && old.parentNode) old.replaceWith(fresh);
+        cardNodes.set(index, fresh);
       },
     }, isExpanded ? '收起' : '展开全诗');
 
-    const action = item.inLibrary
+    const action = inLibrary
       ? el('span', { class: 'tag-in-library', text: '✓ 已在书架' })
       : el('button', {
         class: 'btn btn-outline',
-        onclick: async () => {
+        onclick: async (e) => {
           await app.lib.addToLibrary(seed);
           toast(`已加入书架《${seed.title}》`);
+          e.currentTarget.replaceWith(el('span', { class: 'tag-in-library', text: '✓ 已在书架' }));
         },
       }, '加入书架');
 
-    return el('article', { class: 'result-card' },
+    const node = el('article', { class: 'result-card' },
       el('div', { class: 'result-head' },
         el('h3', { class: 'result-title', text: seed.title }),
         el('p', { class: 'result-meta', text: metaText(seed) }),
@@ -171,17 +181,64 @@ export function mountAdd(root, app) {
       body,
       el('div', { class: 'result-actions' }, toggle, action),
     );
+    cardNodes.set(index, node);
+    return node;
   }
 
-  // 书架变化时刷新"已在书架"状态
-  const unsubscribe = app.lib.subscribe((poems) => {
-    if (!query.trim() || results.length === 0) return;
-    let changed = false;
-    for (const item of results) {
-      const now = app.lib.isInLibrary(item.seed);
-      if (now !== item.inLibrary) { item.inLibrary = now; changed = true; }
+  function renderList() {
+    cardNodes.clear();
+    const list = el('div', { class: 'result-list' });
+    const shown = results.slice(0, rendered);
+    shown.forEach((seed, index) => list.append(resultCard(seed, index)));
+    resultsEl.replaceChildren(list);
+
+    if (rendered < results.length) {
+      const more = el('div', { class: 'load-more' },
+        el('button', { class: 'btn btn-soft', onclick: loadMore },
+          `加载更多（剩余 ${(results.length - rendered).toLocaleString('zh-CN')} 首）`));
+      resultsEl.append(more);
+      resultsEl.append(sentinel);
+      if (observer) observer.observe(sentinel);
+    } else {
+      if (observer) observer.unobserve(sentinel);
     }
-    if (changed) renderResults();
+  }
+
+  function renderResults() {
+    metaLine.replaceChildren();
+    if (!corpus && !corpusError) { resultsEl.replaceChildren(); return; }
+    if (!query.trim()) {
+      resultsEl.replaceChildren(el('div', { class: 'hint-box' },
+        el('p', { text: '输入题目或作者，从诗经至清诗（7 万余首）中查找' })));
+      return;
+    }
+    if (results.length === 0) {
+      resultsEl.replaceChildren(el('div', { class: 'hint-box' }, el('p', { text: '没有找到相关诗词' })));
+      return;
+    }
+    updateMeta();
+    renderList();
+  }
+
+  function performSearch() {
+    query = searchInput.value;
+    if (!corpus) { results = []; rendered = 0; renderResults(); return; }
+    results = app.lib.searchCorpus(query, corpus);
+    rendered = Math.min(PAGE_SIZE, results.length);
+    expanded.clear();
+    renderResults();
+  }
+
+  const onInput = () => {
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(performSearch, 300);
+  };
+  searchInput.addEventListener('input', onInput);
+
+  // 书架变化时刷新「已在书架」状态
+  const unsubscribe = app.lib.subscribe((poems) => {
+    libKeys = libraryKeys(poems);
+    if (query.trim() && results.length > 0 && rendered > 0) renderList();
   });
 
   updateStatus();
@@ -193,6 +250,7 @@ export function mountAdd(root, app) {
 
   return () => {
     clearTimeout(debounceTimer);
+    if (observer) observer.disconnect();
     unsubscribe();
   };
 }

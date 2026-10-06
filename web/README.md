@@ -20,7 +20,7 @@ python3 -m http.server 8080      # 或：npm start / make web（在仓库根目�
 | 页面 | 说明 |
 | --- | --- |
 | **书架** `#/library` | 已收藏诗词卡片；6 种排序（添加时间新/旧、标题/作者首字母、朝代、体裁）+ 按作者分组折叠；点击进入阅读；删除前确认 |
-| **添加诗词** `#/add` | 语料**全文搜索**（题目 / 作者 / 正文），300ms 防抖；标题/作者命中优先、正文命中在后，共取前 50；命中片段高亮、展开全诗、加入书架（已加入显示「已在书架」） |
+| **添加诗词** `#/add` | 语料**全文搜索**（题目 / 作者 / 正文），300ms 防抖；标题/作者命中优先、正文命中在后；结果**展示全部命中并分页**（滚动到底自动加载 / 「加载更多」），显示「找到 N 首」；命中片段高亮、展开全诗、加入书架（已加入显示「已在书架」） |
 | **阅读** `#/reader/:id` | 逐字**平仄**记号（〇/● 或 平/仄）、句末**韵脚**朱砂圈注 +《诗韵新编》韵部；标注说明；右侧**设置抽屉**（显示平仄 / 韵脚、记号样式、字号 18–34） |
 | **习作检测** `#/check` | 粘贴自创新作，自动识别体裁（五/七言 绝/律），展示平仄韵脚并检测 **孤平 / 三平尾 / 三仄尾 / 失对 / 失粘 / 出韵**；问题句整行高亮 + 行首 ⚠ |
 
@@ -67,6 +67,21 @@ npx wrangler pages deploy . --project-name xingzhu --branch main
 ```
 
 首次需按提示 `npx wrangler login`。`prepare-data.sh` 生成的是实体文件，不会把符号链接传上去。
+
+### 方式 C：Workers（Worker + 静态资源）
+
+如果你的 Cloudflare 项目是 **Worker**（构建配置里是「构建命令 / 部署命令」而不是「构建输出目录」），用仓库内的 `web/wrangler.jsonc` 声明静态目录：
+
+| 字段 | 值 |
+| --- | --- |
+| 根目录 | `web` |
+| 构建命令 | `bash tools/prepare-data.sh` |
+| 部署命令 | `npx wrangler deploy` |
+| 分支控制（生产分支） | `web` |
+
+根目录留空时改用：构建 `bash web/tools/prepare-data.sh`、部署 `npx wrangler deploy --config web/wrangler.jsonc`。
+
+> `web/wrangler.jsonc` 里的 `name` 必须等于面板里的 Worker 名称（默认写的是 `xingzhu`）。
 
 ### 说明
 
@@ -137,6 +152,7 @@ cd web && node tools/engine-test.mjs      # 或仓库根目录：make web-test
 ## 与 Android 版的差异
 
 - 布局：桌面优先，书架为响应式网格、设置用右侧抽屉（Android 为单列列表 + BottomSheet）。
+- 搜索结果：Android 固定只取前 50 条；Web 展示**全部命中并分页**（滚动自动加载 / 「加载更多」），显示总数。
 - 书架内过滤：Android 设计稿提及但实现未包含，Web 同样未做，保持一致。
 - 阅读设置：Android 用 `rememberSaveable`（进程内），Web 持久化到 `localStorage`。
 - 其余功能、文案、配色与判定结果与 Android 版一致。

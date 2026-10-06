@@ -108,7 +108,8 @@ export class Library {
     if (missing.length > 0) await this.refresh();
   }
 
-  /** 按题目/作者/全文搜索；标题/作者命中优先，全文命中在后，共取前 50 条 */
+  /** 按题目/作者/全文搜索；标题/作者命中优先，全文命中在后。
+   *  Web 端返回全部命中，由 UI 分页展示（Android 端为取前 50 条）。 */
   searchCorpus(query, corpus) {
     const q = query.trim();
     if (!q) return [];
@@ -117,12 +118,11 @@ export class Library {
     for (const poem of corpus) {
       if (poem.title.includes(q) || poem.author.includes(q)) {
         head.push(poem);
-        if (head.length >= 50) return head;
       } else if (poem.content.includes(q)) {
         tail.push(poem);
       }
     }
-    return head.concat(tail.slice(0, 50 - head.length));
+    return head.concat(tail);
   }
 
   isInLibrary(seed) {
